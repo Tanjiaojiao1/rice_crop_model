@@ -57,6 +57,6 @@ def Trial_Sim():
     print(df.columns)
 
 
-"if __name__=='__main__':"
-"Trial_Sim()"
-print(Photo)
+if __name__=='__main__':
+    Trial_Sim()
+    # print(Photo)
