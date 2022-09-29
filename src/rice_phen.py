@@ -64,7 +64,7 @@ def read_station_weather(station, start, end):
     df = pd.read_table("../data/Meteo(48 sta)/" + str(station) + ".txt", encoding='gbk', sep=' * ', engine='python',
                        skiprows=[1])
     df['Date'] = df.apply(lambda row: pd.to_datetime('%d-%d-%d' % (row.YY, row.mm, row.dd)), axis=1)
-    df = df.loc[(df.Date >= start) & (df.Date <= end), ['Date', 'TemAver']]
+    df = df.loc[(df.Date >= start) & (df.Date <= (end+datetime.timedelta(days=60))), ['Date', 'TemAver']]
     return df
 
 
@@ -121,7 +121,11 @@ def Trial_Sim():
     dfall.to_excel('../data/dfall.xlsx', index=False)
 
     print(df.columns)
-
+def cal_thermal_requirement():
+    df=pd.read_excel('../data/dfall.xlsx').dropna(subset=['DStage'])
+    
+    df=df[['Thermal_cum','photothermal_cum','DStage']].groupby('DStage').quantile('0.5')
+    print (df)
 
 if __name__ == '__main__':
     Trial_Sim()
