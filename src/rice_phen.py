@@ -64,7 +64,7 @@ def read_station_weather(station, start, end):
     df = pd.read_table("../data/Meteo(48 sta)/" + str(station) + ".txt", encoding='gbk', sep=' * ', engine='python',
                        skiprows=[1])
     df['Date'] = df.apply(lambda row: pd.to_datetime('%d-%d-%d' % (row.YY, row.mm, row.dd)), axis=1)
-    df = df.loc[(df.Date >= start) & (df.Date <= (end+datetime.timedelta(days=60))), ['Date', 'TemAver']]
+    df = df.loc[(df.Date >= start) & (df.Date <= (end+datetime.timedelta(days=100))), ['Date', 'TemAver']]
     return df
 
 
@@ -127,6 +127,85 @@ def cal_thermal_requirement():
     df=df[['Thermal_cum','photothermal_cum','DStage']].groupby('DStage').quantile('0.5')
     print (df)
 
-if __name__ == '__main__':
+'''if __name__ == '__main__':
     Trial_Sim()
-    # print(Photo)
+    # print(Photo)'''
+
+
+def median(para):
+    thermal_df = pd.read_excel('../data/dfall.xlsx', sheet_name='Sheet1')
+    thermal_median = thermal_df[para].groupby(thermal_df['DStage']).median()
+    print(thermal_median)
+    return(thermal_median)
+
+
+def simthermal_dev_date():
+    thermal_df = pd.read_excel('../data/dfall.xlsx')
+    thermal_df.index = thermal_df['Date']
+    thermal_df['year'] = thermal_df.index.year
+    thermal_sum = thermal_df['Thermal_cum']
+    thermal_median = median('Thermal_cum')
+    bins = [0, 137.792979, 561.930185, 857.311757, 1018.537240, 1493.815289, 2500]
+    labesl = ['reviving data', 'tillering data', 'jointing data',
+              'booting data', 'heading data', 'maturity data']
+    thermal_df['simthermal_Dstage']=pd.cut(thermal_sum,bins=bins,labels=labesl)
+    thermal_df['simthermal_standard'] = thermal_df['sim_Dstage'].map(thermal_median.to_dict())
+    newthermal_df = thermal_df.drop_duplicates(subset=['station ID','year','sim_Dstage'], keep='first', inplace=False )
+    thermal_df = thermal_df.reset_index(drop = True)
+    thermal_df.drop(thermal_df.columns[12:15], axis=1, inplace=True)
+    newthermal_df = newthermal_df.reset_index(drop = True)
+    newthermal_df.drop(newthermal_df.columns[2:12], axis=1, inplace=True)
+    simdf = pd.merge(thermal_df, newthermal_df, on=['Date','station ID'], how='left')
+
+    simdf.to_excel('../data/dfall.xlsx', index=False)
+
+
+def simphotothermal_dev_date():
+    thermal_df = pd.read_excel('../data/dfall.xlsx', sheet_name='Sheet1')
+    thermal_df.index = thermal_df['Date']
+    phothermal_sum = thermal_df['photothermal_cum']
+    phothermal_median = median('photothermal_cum')
+    bins = [0, 137.792979, 559.648112, 782.703418, 916.268239, 1397.062866, 2500]
+    labesl = ['reviving data', 'tillering data', 'jointing data',
+              'booting data', 'heading data', 'maturity data']
+    thermal_df['simphothermal_Dstage'] = pd.cut(phothermal_sum, bins=bins, labels=labesl)
+    thermal_df['simphothermal_standard'] = thermal_df['simphothermal_Dstage'].map(phothermal_median.to_dict())
+    newthermal_df = thermal_df.drop_duplicates(subset=['station ID','year','simphothermal_Dstage'], keep='first', inplace=False )
+    thermal_df = thermal_df.reset_index(drop = True)
+    thermal_df.drop(thermal_df.columns[14:16], axis=1, inplace=True)
+    newthermal_df = newthermal_df.reset_index(drop = True)
+    newthermal_df.drop(newthermal_df.columns[3:14], axis=1, inplace=True)
+    simdf = pd.merge(thermal_df, newthermal_df, on=['station ID','Date'], how='left')
+
+    writer = pd.ExcelWriter('../data/dfall.xlsx', mode='a', engine='openpyxl', if_sheet_exists='new')
+    simdf.to_excel(writer, sheet_name='newsheet1', index=False)
+    writer.save()
+    writer.close()
+
+
+if __name__ == '__main__':
+    simphotothermal_dev_date()
+
+
+
+def simthermal_errodays():
+    df = pd.read_excel('../data/dfall.xlsx', sheet_name='Sheet1')
+    df.index = df['Date']
+    df['obser_dvs'] = df['DStage'].ffill()
+    df['sim_dvs'] = df['simphothermal_Dstage'].ffill()
+    origin = df['obser_dvs'].groupby([df['station ID'],
+                                      df.index.year,df['obser_dvs']]).count()
+    sim = df['sim_dvs'].groupby([df['station ID'],
+                                 df.index.year,df['sim_dvs']]).count()
+
+    results = sim.unstack() - origin.unstack()
+    result = results.reset_index()
+    writer = pd.ExcelWriter('../data/dfall.xlsx', mode='a', engine='openpyxl', if_sheet_exists='new')
+    result.to_excel(writer, sheet_name='photothermal_errorday', index=False)
+    writer.save()
+    writer.close()
+
+if __name__ == '__main__':
+    simthermal_errodays()
+
+
