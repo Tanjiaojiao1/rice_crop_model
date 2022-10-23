@@ -127,9 +127,6 @@ def cal_thermal_requirement():
     df=df[['Thermal_cum','photothermal_cum','DStage']].groupby('DStage').quantile('0.5')
     print (df)
 
-'''if __name__ == '__main__':
-    Trial_Sim()
-    # print(Photo)'''
 
 
 def median(para):
@@ -183,25 +180,28 @@ def simphotothermal_dev_date():
     writer.close()
 
 
-if __name__ == '__main__':
-    simphotothermal_dev_date()
-
-
-
 def simthermal_errodays():
     df = pd.read_excel('../data/dfall.xlsx', sheet_name='Sheet1')
-    df.index = df['Date']
-    df['obser_dvs'] = df['DStage'].ffill()
-    df['sim_dvs'] = df['simphothermal_Dstage'].ffill()
-    origin = df['obser_dvs'].groupby([df['station ID'],
-                                      df.index.year,df['obser_dvs']]).count()
-    sim = df['sim_dvs'].groupby([df['station ID'],
-                                 df.index.year,df['sim_dvs']]).count()
+    newdf = df.drop(columns=['year', 'TemAver', 'Thermal', 'Thermal_cum', 'dayL', 'photo_raw',
+                                    'photo', 'photothermal', 'photothermal_cum', 'simthermal_Dstage',
+                                    'simthermal_standard', 'simphothermal_Dstage',
+                                    'simphothermal_standard'],
+                            axis=1, inplace=False)
+    reviving_date = newdf[newdf['DStage'] == 'reviving data']
+    reviving_date['reviving_date'] = reviving_date['Date']
+    df2 = pd.merge(df, reviving_date, on=['station ID', 'Date', 'DStage'], how='left')
+    df2['reviving_date'] = df2['reviving_date'].ffill()
+    df2['obser_dvs'] = df2['DStage'].ffill()
+    df2['sim_dvs'] = df2['simthermal_Dstage'].ffill()
+    origin = df2['obser_dvs'].groupby([df2['station ID'],
+                                      df2['reviving_date'],df2['obser_dvs']]).count()
+    sim = df2['sim_dvs'].groupby([df2['station ID'],
+                                 df2['reviving_date'],df2['sim_dvs']]).count()
 
     results = sim.unstack() - origin.unstack()
     result = results.reset_index()
     writer = pd.ExcelWriter('../data/dfall.xlsx', mode='a', engine='openpyxl', if_sheet_exists='new')
-    result.to_excel(writer, sheet_name='photothermal_errorday', index=False)
+    result.to_excel(writer, sheet_name='thermal_errorday', index=False)
     writer.save()
     writer.close()
 
