@@ -7,6 +7,8 @@ import Sun
 import datetime
 import seaborn as sns
 import matplotlib.pyplot as plt
+import os
+os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
 pd.options.display.max_columns = 999
 
@@ -42,22 +44,26 @@ def Photoperiod(Pdaily, DLBase, DLOptimum, DLCeiling, headingdate, today):
     return Photo
 
 
-def photo_period_based_on_yin(dl, mu, zeta, ep):
+def photoeffect_yin(DL, mu=-15.46, zeta=2.06, ep=2.48):
     '''
     Yin 1997 beta function
     the effect of photoperiod on development rate
     mu=-15.46, zeta=2.06, ep=2.48
     '''
-    photo = math.exp(mu) * (dl) ** zeta * (24 - dl) ** ep
-    photo = photo / (max([math.exp(mu) * (dl) ** zeta * (24 - dl) ** ep for dl in np.linspace(1, 24, 100)]))
-    return photo
-def photoeffect2(DL):
-    Dc = 20
-    Do = 12.5
-    photo = (DL-Dc)/(Do-Dc)
-    return photo
+    def yin_photo(DL, mu=-15.46, zeta=2.06, ep=2.48):
+        return math.exp(mu) * (DL) ** zeta * (24 - DL) ** ep
+    
+    photo = yin_photo(DL=DL,mu=mu,zeta=zeta,ep=ep) 
+    max_photo=max([yin_photo(DL=DLm,mu=mu,zeta=zeta,ep=ep) for DLm in np.linspace(1, 24, 100)])
+    return photo/max_photo
+def photoeffect_wofost(DL,Dc=20,Do=12.5):
+    def wofost_photo(DL,Dc=20,Do=12.5):
+        return (DL-Dc)/(Do-Dc)
+    photo = wofost_photo(DL=DL,Dc=Dc,Do=Do)
+    max_photo=max([wofost_photo(DL=DLm,Dc=Dc,Do=Do) for DLm in np.linspace(1, 24, 100)])
+    return photo/max_photo
 
-def photoeffect3(DL, MOPP=11.5, PPSE=0.2):
+def photoeffect_oryza200(DL, MOPP=11.5, PPSE=0.2):
     # MOPP = 11.5
     # PPSE = 0.2
     if DL < MOPP:
@@ -83,9 +89,14 @@ def Test_wang_engle():
 
 
 def Test_Yin_photo():
-    plot(range(1, 24), [photo_period_based_on_yin(dl=dl) for dl in range(1, 24)])
+    plot(range(1, 24), [photoeffect_yin(dl=dl) for dl in range(1, 24)])
     show()
-
+def Test_photoeffect2():
+    plot(range(1, 24), [photoeffect_wofost(DL=dl) for dl in range(1, 24)])
+    show()
+def Test_photoeffect3():
+    plot(range(1, 24), [photoeffect_oryza200(DL=dl) for dl in range(1, 24)])
+    show()
 
 def read_station_weather(station, start, end):
     df = pd.read_table("../data/Meteo(48 sta)/" + str(station) + ".txt", encoding='gbk', sep=' * ', engine='python',
@@ -123,7 +134,7 @@ def Trial_Sim():
         dfw['Thermal_cum'] = dfw.Thermal.cumsum()
         dfw['dayL'] = dfw.Date.apply(
             lambda x: sun.dayCivilTwilightLength(year=x.year, month=x.month, day=x.day, lon=row.lon, lat=row.lat))
-        dfw['photo_raw'] = dfw.dayL.apply(lambda x: photoeffect2(DL=x))
+        dfw['photo_raw'] = dfw.dayL.apply(lambda x: photoeffect_yin(DL=x))
         dfw['photo'] = dfw.apply(lambda rowt: photo_effect_correct(today=rowt.Date, revd=row['reviving date'], jd=row['jointing date'],
                                               hd=row['heading date'], photo=rowt.photo_raw), axis=1)
         dfw['photothermal'] = dfw.photo * dfw.Thermal
@@ -627,6 +638,6 @@ if __name__ == '__main__':
     # # Sim_date_meteo(Sim_date, 'jointing date', 'booting date')
     # # Sim_date_meteo(Sim_date, 'booting date', 'heading date')
     # Sim_date_meteo(Sim_date, 'heading date','maturity date')
-    Trial_Sim()
+    Test_photoeffect2()
     # bayesoptimize(maturity_model, 2, 5)
 
