@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 pd.options.display.max_columns = 999
 
 
-def Wang_engle(T, Tbase, Topt, Tcei):
+def Wang_engle(T, Tbase=8, Topt=30, Tcei=42):
     '''
     Wang and Engle 1998, Agircultual systems
     Tbase=8, Topt=30, Tcei=42.
@@ -23,7 +23,7 @@ def Wang_engle(T, Tbase, Topt, Tcei):
         alpha = math.log(2, ) / (math.log((Tcei - Tbase) / (Topt - Tbase)))
         thermal = (2 * ((T - Tbase) ** alpha) * (Topt - Tbase) ** alpha - (T - Tbase) ** (2 * alpha)) / (
                 (Topt - Tbase) ** (2 * alpha))
-        return thermal
+        return thermal * (T - Tbase)
 
 
 def Photoperiod(Pdaily, DLBase, DLOptimum, DLCeiling, headingdate, today):
@@ -68,9 +68,9 @@ def photoeffect3(DL, MOPP=11.5, PPSE=0.2):
     return PPFAC
 def photo_effect_correct(today, revd, jd, hd, photo):
     if pd.isna(jd):
-        jd = revd + datetime.timedelta(days=32)
+        jd = revd + datetime.timedelta(days=25)
     if pd.isna(hd):
-        hd = revd + datetime.timedelta(days=62)
+        hd = revd + datetime.timedelta(days=55)
     if today < jd or today > hd:
         return 1
     else:
@@ -106,8 +106,8 @@ def Trial_Sim():
     sun = Sun.Sun()
     df = pd.read_csv('../data/obser_pheno_catalog.csv', encoding="GBK",
                      parse_dates=['reviving date', 'tillering date', 'jointing date',
-                                  'booting date', 'heading date', 'maturity date'])
-    df['season'] = df.groupby(['station ID', 'year']).cumcount()+1
+                                  'booting date', 'heading date','maturity date'])
+    df['season']= df.groupby(['station ID', 'year']).cumcount()+1
     dfmm = df[['station ID', 'lat', 'lon', 'alt', 'year', 'season',
                'reviving date', 'tillering date', 'jointing date',
                'booting date', 'heading date','maturity date']]
@@ -123,7 +123,7 @@ def Trial_Sim():
         dfw['Thermal_cum'] = dfw.Thermal.cumsum()
         dfw['dayL'] = dfw.Date.apply(
             lambda x: sun.dayCivilTwilightLength(year=x.year, month=x.month, day=x.day, lon=row.lon, lat=row.lat))
-        dfw['photo_raw'] = dfw.dayL.apply(lambda x: photo_period_based_on_yin(dl=x, mu=-15.46, zeta=2.06, ep=2.48))
+        dfw['photo_raw'] = dfw.dayL.apply(lambda x: photoeffect2(DL=x))
         dfw['photo'] = dfw.apply(lambda rowt: photo_effect_correct(today=rowt.Date, revd=row['reviving date'], jd=row['jointing date'],
                                               hd=row['heading date'], photo=rowt.photo_raw), axis=1)
         dfw['photothermal'] = dfw.photo * dfw.Thermal
@@ -136,9 +136,9 @@ def Trial_Sim():
     df = dfm.merge(dfall, on=['station ID', 'year', 'Date', 'season'], how='left')
     df.boxplot(column=['Thermal_cum', 'photothermal_cum'], by=['DStage'])
     show()
-    df.to_excel('../data/dfall_test.xlsx', index=False)
+    df.to_excel('../data/dfall_phofun2.xlsx', index=False)
     thermaldf = dfall.merge(dfm, on=['station ID', 'year', 'Date', 'season'], how='left')
-    thermaldf.to_excel('../data/thermaldf_test.xlsx', index=False)
+    thermaldf.to_excel('../data/thermaldf_phofun2.xlsx', index=False)
 
 
 
@@ -189,7 +189,7 @@ def Calculation_error_days():
     obser_days.to_excel(write, sheet_name='early_obser_days', index=True)
     sim_days_thermal = earlydf['Thermal_Dstage'].groupby([earlydf['station ID'], earlydf['year'],
                                                           earlydf['season'], earlydf['Thermal_Dstage']]).count()
-c    sim_days_phothermal = earlydf['Phothermal_Dstage'].groupby([earlydf['station ID'], earlydf['year'],
+    sim_days_phothermal = earlydf['Phothermal_Dstage'].groupby([earlydf['station ID'], earlydf['year'],
                                                                 earlydf['season'], earlydf['Phothermal_Dstage']]).count()
 
     bins2 = [0, 166.382740, 600.055712, 827.298495, 965.626885, 1345.368864, 25000]
@@ -270,7 +270,7 @@ def error_boxplot(errordf, errordf2):
     g = sns.boxplot(data=a, x="Error days", y="DStage", hue="class", palette='Set2',
                     medianprops={'linestyle': '-', 'color': 'black'},
                     showmeans=True, meanprops={'marker': 'o', 'markerfacecolor': 'red', 'markeredgecolor': 'white'})
-ccccc    plt.ylabel('Phases', fontsize=18)
+    plt.ylabel('Phases', fontsize=18)
     plt.xlabel('Error days', fontsize=18)
     plt.xticks(fontsize=15)
     plt.yticks(fontsize=15)
@@ -553,14 +553,14 @@ def date_period(time1,time2):
     b2 = a2.split('-')
     c1 = datetime.date(int(b1[0]), int(b1[1]), int(b1[2]))   #开始的日期de
     c2 = datetime.date(int(b2[0]), int(b2[1]), int(b2[2]))  #  结束的日期
-    result = (c2-c1).daysc
+    result = (c2-c1).days
     return result
 
-'''
- Define the objective function for global optimization
- VGP is calculated first
-'''
-def object_func(Tbase, Topt, Tcei, mu, zeta, ep, cumthermal):
+
+# 定义贝叶斯优化目标函数，计算成熟日误差RMSE
+def maturity_model(mu, zeta, ep, cumthermal):
+    RMSE = 0
+    # 计算每天的积温
     sun = Sun.Sun()
     df = pd.read_csv('D:/workspace/rice_crop_model/data/obser_pheno_catalog.csv', encoding="GBK",
                      parse_dates=['reviving date', 'tillering date', 'jointing date',
@@ -570,16 +570,16 @@ def object_func(Tbase, Topt, Tcei, mu, zeta, ep, cumthermal):
         dfw = read_station_weather(df['station ID'][j], df['reviving date'][j], df['maturity date'][j])
         dfw.index = pd.DatetimeIndex(dfw['Date'])
         n = (pd.Timestamp(df["reviving date"][j]) + pd.Timedelta("1day")).date().strftime('%Y-%m-%d')
-        m = (pd.Timestamp(df['heading date'][j]) + pd.Timedelta("20day")).date().strftime('%Y-%m-%d')
+        m = (pd.Timestamp(df['maturity date'][j]) + pd.Timedelta("30day")).date().strftime('%Y-%m-%d')
         period = date_period(n, m)
         period_d = 0
         day = pd.Timestamp(df['reviving date'][j])
-        # Wang_engle * photoeffect_yin
+
         for k in range(period + 1):
             day = day + pd.Timedelta(k, unit='d')
             dfw1 = dfw[dfw.index == day]
             T = dfw1['TemAver'].values
-            DTT = Wang_engle(T, Tbase, Topt, Tcei) * (T - Tbase)
+            DTT = Wang_engle(T)
             dayL = sun.dayCivilTwilightLength(year=day.year, month=day.month, day=day.day, lon=df['lon'][j],
                                               lat=df['lat'][j])
             photo_raw = photo_period_based_on_yin(dayL, mu, zeta, ep)
@@ -587,31 +587,46 @@ def object_func(Tbase, Topt, Tcei, mu, zeta, ep, cumthermal):
             cumthermal = cumthermal - phothermal
             period_d += 1
 
-        if cumthermal <= 0:
+        if cumthermal.size == 0 or cumthermal > 0:
+            f1["erro"].append(np.nan)
+        else:
             SimErr1 = period_d - period
             f1["erro"].append(SimErr1)
             break
-        else:
-            f1["erro"].append(20)
+
     F1 = pd.DataFrame(f1)
     F1 = F1.dropna(axis=0)
     if F1.shape[0] != 0:
         s = 0
         for y in F1["erro"]:
             s += y ** 2
-        return (-(s / F1.shape[0]) ** 0.5)
+        RMSE = (s / F1.shape[0]) ** 0.5
+        return RMSE
     else:
-        return (-np.inf)
+        return None
+
 
 
 # 贝叶斯优化参数
 def bayesoptimize(func,init_points, n_iter):
-    pbounds = {pbounds = {'Tbase': (8 , 10), 'Topt': (19 ,36),  'Tcei': (38 ,45),
-                          'mu': (-52 ,-14 ), 'zeta': ( 1,8 ), 'ep': (0 ,13 ),'cumthermal': ( 600,2000) }}
+    pbounds = {'mu': (-60, -10), 'zeta': (0, 33), 'ep': (0, 33), 'cumthermal': (1000, 2000),}
     optimizer = BayesianOptimization(func, pbounds=pbounds, random_state=1)
     optimizer.maximize(init_points, n_iter)
     print(optimizer.max)
 
 if __name__ == '__main__':
-     bayesoptimize(object_func, 5, 20)
+    # Calculation_error_days()
+    # errordf = pd.read_excel('../data/error_days.xlsx', sheet_name='early_result', index_col=[0,1,2])
+    # errordf2 = pd.read_excel('../data/error_days.xlsx', sheet_name='late_result', index_col=[0,1,2])
+    # error_boxplot(errordf, errordf2)
+    # Sim_date = pd.read_excel('../data/Sim_data.xlsx', sheet_name='sim_phothermal_date',
+    #               parse_dates=['reviving date', 'tillering date', 'jointing date',
+    #                            'booting date', 'heading date','maturity date'])
+    # # Sim_date_meteo(Sim_date, 'reviving date', 'tillering date')
+    # # Sim_date_meteo(Sim_date, 'tillering date', 'jointing date')
+    # # Sim_date_meteo(Sim_date, 'jointing date', 'booting date')
+    # # Sim_date_meteo(Sim_date, 'booting date', 'heading date')
+    # Sim_date_meteo(Sim_date, 'heading date','maturity date')
+    Trial_Sim()
+    # bayesoptimize(maturity_model, 2, 5)
 
