@@ -18,8 +18,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from matplotlib.image import imread
 # from adjusttext import adjust_text
-from adjustText import adjust_text
-from collections import OrderedDict
+# from adjustText import adjust_text
+# from collections import OrderedDict
 
 def create_map():
     shp_path = 'D:/cn_shp/Province_9/'
@@ -60,8 +60,8 @@ def create_map():
         alpha=0.5,
         linestyle='--'
     )
-    gl.xlabels_top = False  # 关闭顶端的经纬度标签
-    gl.ylabels_right = False  # 关闭右侧的经纬度标签
+    gl.top_labels = False  # 关闭顶端的经纬度标签
+    gl.right_labels = False  # 关闭右侧的经纬度标签
     gl.xformatter = LONGITUDE_FORMATTER  # x轴设为经度的格式
     gl.yformatter = LATITUDE_FORMATTER  # y轴设为纬度的格式
     gl.xlocator = mticker.FixedLocator(np.arange(70, 130+5, 10))
@@ -81,7 +81,7 @@ def create_map():
     ax2.set_extent([105, 125, 0, 25])
     # ax2.stock_img()
     ax2.imshow(
-        imread('../NE1_50M_SR_W.tif'),
+        imread('D:/NE1_50M_SR_W.tif'),
         origin='upper',
         transform=proj,
         extent=[-180, 180, -90, 90]
@@ -94,23 +94,20 @@ def main():
     plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
     plt.rcParams['axes.unicode_minus'] = False
     # matplotlib画图中中文显示会有问题，需要这两行设置默认字体
-    title = f'Distribution Of Station Around China'
-    ax.set_title(title, fontsize=18)
 
     df = pd.read_csv('D:/Python code/station catalog.csv', encoding='gbk')
-    df['经度'] = df['经度'].astype(np.float64)
-    df['纬度'] = df['纬度'].astype(np.float64)
-    ax.scatter(
-        df['经度'].values,
-        df['纬度'].values,
-        marker='o',
-        s=10 ,
-        color ="red")
+    bins = [0, 3, 6, 10, 14]  # median_thermal():
+    lables = ['0-3', '3-6', '6-10', '10-14']
+    df['mark_year'] = pd.cut(df['num_years'], bins=bins, labels=lables)
+    grouped_data = df.groupby('mark_year')
+    marker_dict = {'0-3': 'o', '3-6': 's', '6-10': '^', '10-14': '<'}
+    size_dict = {'0-3': 15, '3-6': 15, '6-10': 15, '10-14': 15}
 
-    # for i, j, k in list(zip(df['lon'].values, df['lat'].values, df['name'].values)):
-    #     ax.text(i - 0.8, j + 0.2, k, fontsize=6)
-
-    plt.savefig('station_distribute_map.png')
+    for mark_year, group in grouped_data:
+        ax.scatter(group['经度'], group['纬度'], s=size_dict[mark_year], marker=marker_dict[mark_year],
+                   transform=ccrs.PlateCarree(), label=str(mark_year))
+    ax.legend()
+    plt.savefig('station_distribute_map2.png')
 
 if __name__ == '__main__':
     main()
