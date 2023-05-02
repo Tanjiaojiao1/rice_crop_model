@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 pd.options.display.max_columns = 999
 
 
-def Wang_engle(T, Tbase=8, Topt=30, Tcei=42):
+def Wang_engle(T, Tbase, Topt, Tcei):
     '''
     Wang and Engle 1998, Agircultual systems
     Tbase=8, Topt=30, Tcei=42.
@@ -57,20 +57,20 @@ def photoeffect2(DL):
     photo = (DL-Dc)/(Do-Dc)
     return photo
 
-def photoeffect3(DL, MOPP=11.5, PPSE=0.2):
+def photoeffect3(DL, Do, PPSE=0.2):
     # MOPP = 11.5
     # PPSE = 0.2
-    if DL < MOPP:
+    if DL < Do:
         PPFAC = 1.
     else:
-        PPFAC = 1. - (DL - MOPP) * PPSE
+        PPFAC = 1. - (DL - Do) * PPSE
         PPFAC = np.min([1., np.max([0., PPFAC])])
     return PPFAC
 def photo_effect_correct(today, revd, jd, hd, photo):
     if pd.isna(jd):
-        jd = revd + datetime.timedelta(days=25)
+        jd = revd + datetime.timedelta(days=32)
     if pd.isna(hd):
-        hd = revd + datetime.timedelta(days=55)
+        hd = revd + datetime.timedelta(days=63)
     if today < jd or today > hd:
         return 1
     else:
@@ -558,9 +558,7 @@ def date_period(time1,time2):
 
 
 # 定义贝叶斯优化目标函数，计算成熟日误差RMSE
-def maturity_model(mu, zeta, ep, cumthermal):
-    RMSE = 0
-    # 计算每天的积温
+def maturity_model(Tbase, Topt, Tcei, mu, zeta, ep, cumthermal):
     sun = Sun.Sun()
     df = pd.read_csv('D:/workspace/rice_crop_model/data/obser_pheno_catalog.csv', encoding="GBK",
                      parse_dates=['reviving date', 'tillering date', 'jointing date',
@@ -570,7 +568,7 @@ def maturity_model(mu, zeta, ep, cumthermal):
         dfw = read_station_weather(df['station ID'][j], df['reviving date'][j], df['maturity date'][j])
         dfw.index = pd.DatetimeIndex(dfw['Date'])
         n = (pd.Timestamp(df["reviving date"][j]) + pd.Timedelta("1day")).date().strftime('%Y-%m-%d')
-        m = (pd.Timestamp(df['maturity date'][j]) + pd.Timedelta("30day")).date().strftime('%Y-%m-%d')
+        m = (pd.Timestamp(df['maturity date'][j]) + pd.Timedelta("20day")).date().strftime('%Y-%m-%d')
         period = date_period(n, m)
         period_d = 0
         day = pd.Timestamp(df['reviving date'][j])
@@ -579,20 +577,22 @@ def maturity_model(mu, zeta, ep, cumthermal):
             day = day + pd.Timedelta(k, unit='d')
             dfw1 = dfw[dfw.index == day]
             T = dfw1['TemAver'].values
-            DTT = Wang_engle(T)
+            DTT = Wang_engle(T, Tbase, Topt, Tcei)*(T-Tbase)
             dayL = sun.dayCivilTwilightLength(year=day.year, month=day.month, day=day.day, lon=df['lon'][j],
                                               lat=df['lat'][j])
             photo_raw = photo_period_based_on_yin(dayL, mu, zeta, ep)
-            phothermal = DTT * photo_raw
+            photo = photo_effect_correct(today=day, revd=df['reviving date'][j], jd=df['jointing date'][j],
+                                         hd=df['heading date'][j], photo=photo_raw)
+            phothermal = DTT * photo
             cumthermal = cumthermal - phothermal
             period_d += 1
 
-        if cumthermal.size == 0 or cumthermal > 0:
-            f1["erro"].append(np.nan)
-        else:
-            SimErr1 = period_d - period
+        if cumthermal <= 0:
+            SimErr1=period_d-period
             f1["erro"].append(SimErr1)
             break
+        else:
+            f1["erro"].append(np.nan)
 
     F1 = pd.DataFrame(f1)
     F1 = F1.dropna(axis=0)
@@ -600,33 +600,19 @@ def maturity_model(mu, zeta, ep, cumthermal):
         s = 0
         for y in F1["erro"]:
             s += y ** 2
-        RMSE = (s / F1.shape[0]) ** 0.5
-        return RMSE
+        return (s / F1.shape[0]) ** 0.5
     else:
-        return None
-
+        return (-np.inf)
 
 
 # 贝叶斯优化参数
 def bayesoptimize(func,init_points, n_iter):
-    pbounds = {'mu': (-60, -10), 'zeta': (0, 33), 'ep': (0, 33), 'cumthermal': (1000, 2000),}
+    pbounds = {'Tbase': (8 , 10), 'Topt': (19 ,36),  'Tcei': (38 ,45),
+               'mu': (-60, -10), 'zeta': (0, 33), 'ep': (0, 33), 'cumthermal': (600, 2000),}
     optimizer = BayesianOptimization(func, pbounds=pbounds, random_state=1)
     optimizer.maximize(init_points, n_iter)
     print(optimizer.max)
 
 if __name__ == '__main__':
-    # Calculation_error_days()
-    # errordf = pd.read_excel('../data/error_days.xlsx', sheet_name='early_result', index_col=[0,1,2])
-    # errordf2 = pd.read_excel('../data/error_days.xlsx', sheet_name='late_result', index_col=[0,1,2])
-    # error_boxplot(errordf, errordf2)
-    # Sim_date = pd.read_excel('../data/Sim_data.xlsx', sheet_name='sim_phothermal_date',
-    #               parse_dates=['reviving date', 'tillering date', 'jointing date',
-    #                            'booting date', 'heading date','maturity date'])
-    # # Sim_date_meteo(Sim_date, 'reviving date', 'tillering date')
-    # # Sim_date_meteo(Sim_date, 'tillering date', 'jointing date')
-    # # Sim_date_meteo(Sim_date, 'jointing date', 'booting date')
-    # # Sim_date_meteo(Sim_date, 'booting date', 'heading date')
-    # Sim_date_meteo(Sim_date, 'heading date','maturity date')
-    Trial_Sim()
-    # bayesoptimize(maturity_model, 2, 5)
+    bayesoptimize(maturity_model, 2, 5)
 
