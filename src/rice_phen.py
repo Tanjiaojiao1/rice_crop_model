@@ -7,6 +7,8 @@ import Sun
 import datetime
 import seaborn as sns
 import matplotlib.pyplot as plt
+import os
+os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
 pd.options.display.max_columns = 999
 
