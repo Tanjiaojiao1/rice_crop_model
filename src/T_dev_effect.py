@@ -7,10 +7,10 @@ def T_base_opt(T, Tbase=8, Topt=30):
     mu=-15.46, zeta=2.06, ep=2.48
     '''
     
-    return np.interp(T,[Tbase,Topt],[0,1])
+    return np.interp(T,[Tbase,Topt],[0,Topt-Tbase])
 def T_base_op_ceiling(T, Tbase=8, Topt_low=20,Topt_high=30, Tcei=42):
 
-    return np.interp(T,[Tbase,Topt_low,Topt_high,Tcei],[0,1,1,0])
+    return np.interp(T,[Tbase,Topt_low,Topt_high,Tcei],[0,Topt_low-Tbase,Topt_low-Tbase,0])
 
 def Wang_engle(T, Tbase=8, Topt=30, Tcei=42):
     '''
