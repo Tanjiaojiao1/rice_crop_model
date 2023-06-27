@@ -26,11 +26,75 @@ def Tem_correct_T_base_opt_ceiling(today, hd,T,Tbase2,Topt_low2,Topt_high2,Tcei2
     else:
         return Thermal
 
-def Tem_correct_Wang_engle(today, hd,T,Tbase2,Topt2,Tcei2,Thermal):
+def Tem_correct_Wang_engle(today, hd,T,Tbase2,Topt2,Tcei2,value):
     if today > hd:
         return  Wang_engle(T, Tbase2,Topt2,Tcei2)
     else:
-        return Thermal
+        return value
+
+def cluster_file():
+    # 读取站点信息文件
+    station_df = pd.read_csv('D:/workspace/rice_crop_model/data/clusters/station_catalog_obserphen.csv', encoding='gbk')
+    dfall = pd.DataFrame()
+    # 计算聚类变量
+    for ind, row in station_df.iterrows():
+        # 计算 >=8℃年均有效积温变量
+        dfw = read_station_weather(row['station ID'], pd.to_datetime('1986-01-01'), pd.to_datetime('2005-12-30'))
+        dfw = dfw.dropna()
+        dfw = dfw[dfw['TemAver'] <= 50].reset_index(drop=True)
+        dfw['daily_gt8'] = dfw['TemAver'].apply(lambda x: max(x - 8, 0))
+        n = len(dfw)
+        dfw['Annual_gt8'] = (dfw.daily_gt8.cumsum()) / n * 365
+        dfw['Annual_Tem'] = (dfw.TemAver.cumsum()) / n * 365
+        dfw['station ID'] = row['station ID']
+        dfw = dfw.drop_duplicates(subset=['station ID'], keep='last')
+        dfall = pd.concat([dfall, dfw])
+    df = station_df.merge(dfall, on=['station ID'], how='left')
+    # 聚类变量列表
+    cluster_vars = ['Annual_Tem', 'Annual_GT8', 'AnGT8+lat', 'AnTem+lat']
+    # 不同聚类数列表
+    n_clusters_list = [3, 6, 9, 12, 15]
+    # 循环生成聚类结果
+    for i, var in enumerate(cluster_vars):
+        for n in n_clusters_list:
+            # 读取数据并处理
+            for ind, row in df.iterrows():
+                # 获取聚类变量
+                if var == 'Annual_gt8':
+                    X = pd.DataFrame({'Annual_gt8': df.Annual_gt8})
+                elif var == 'lat+AnTem':
+                    X = pd.DataFrame({'Lat': df.lat, 'Annual_Tem': df.Annual_Tem})
+                else:
+                    X = pd.DataFrame({'Annual_Tem': df.Annual_Tem})
+                # 聚类
+                X_scaled = StandardScaler().fit_transform(X)
+                kmeans = KMeans(n_clusters=n)
+                kmeans.fit(X_scaled)
+                y_pred = kmeans.predict(X_scaled)
+                cluster_col_name = f'cluster_{n}_{var}'
+                df[cluster_col_name] = y_pred
+    # 将结果输出到文件
+    df.to_csv('../data/clusters/merged_clusters.csv', index=False)
+
+    # 起始和结束列的索引
+    start_col = 13
+    end_col = df.shape[1]
+    # 循环提取分类类别并存储为 Excel 文件
+    for i in range(start_col, end_col):
+        # 获取列名和不同聚类类别保存的文件名
+        col_name = df.columns[i]
+        f_name = col_name[9:]
+        # 获取不同类别
+        unique_values = df[col_name].unique()
+        # 循环存储每个类别的数据
+        for value in unique_values:
+            # 筛选数据
+            filtered_df = df[df[col_name] == value]
+            # 构造不同聚类类别文件名
+            file_name = f'{f_name}_{value}.xlsx'
+            # 存储为 Excel 文件
+            filtered_df.to_excel('../data/clusters/'+file_name, index=False)
+    return df
 
 def simulate_and_calibrate_T_base_opt_photoeffect_yin(mu, zeta, ep, Tbase, Topt, Tbase2):
     df = dft.copy()
@@ -648,7 +712,7 @@ def simulate_and_calibrate_Wang_engle_photoeffect_yin(mu, zeta, ep, Tbase, Topt,
         dfw['Thermal_raw'] = dfw.TemAver.apply(lambda x: Wang_engle(T=x, Tbase=Tbase, Topt=Topt, Tcei=Tcei))
         dfw['Thermal_correct'] = dfw.apply(
             lambda rowt: Tem_correct_Wang_engle(today=rowt.Date, hd=row['heading date'], T=rowt.TemAver,
-                                                        Tbase2=Tbase2, Topt2=Topt,Tcei2=Tcei, Thermal=rowt.Thermal_raw), axis=1)
+                                                        Tbase2=Tbase2, Topt2=Topt,Tcei2=Tcei, value=rowt.Thermal_raw), axis=1)
         dfw['Thermal_cum'] = dfw.Thermal_correct.cumsum()
         dfw['dayL'] = dfw.Date.apply(
             lambda x: sun.dayCivilTwilightLength(year=x.year, month=x.month, day=x.day, lon=row.lon, lat=row.lat))
@@ -747,7 +811,7 @@ def simulate_and_calibrate_Wang_engle_photoeffect_wofost(Dc, Do, Tbase, Topt, Tc
         dfw['Thermal_raw'] = dfw.TemAver.apply(lambda x: Wang_engle(T=x, Tbase=Tbase, Topt=Topt, Tcei=Tcei))
         dfw['Thermal_correct'] = dfw.apply(
             lambda rowt: Tem_correct_Wang_engle(today=rowt.Date, hd=row['heading date'], T=rowt.TemAver,
-                                                Tbase2=Tbase2, Topt2=Topt, Tcei2=Tcei, Thermal=rowt.Thermal_raw),axis=1)
+                                                Tbase2=Tbase2, Topt2=Topt, Tcei2=Tcei, value=rowt.Thermal_raw),axis=1)
         dfw['Thermal_cum'] = dfw.Thermal_correct.cumsum()
         dfw['dayL'] = dfw.Date.apply(
             lambda x: sun.dayCivilTwilightLength(year=x.year, month=x.month, day=x.day, lon=row.lon, lat=row.lat))
@@ -846,7 +910,7 @@ def simulate_and_calibrate_Wang_engle_photoeffect_oryza2000(Dc, Tbase, Topt, Tce
         dfw['Thermal_raw'] = dfw.TemAver.apply(lambda x: Wang_engle(T=x, Tbase=Tbase, Topt=Topt, Tcei=Tcei))
         dfw['Thermal_correct'] = dfw.apply(
             lambda rowt: Tem_correct_Wang_engle(today=rowt.Date, hd=row['heading date'], T=rowt.TemAver,
-                                                Tbase2=Tbase2, Topt2=Topt, Tcei2=Tcei, Thermal=rowt.Thermal_raw),
+                                                Tbase2=Tbase2, Topt2=Topt, Tcei2=Tcei, value=rowt.Thermal_raw),
             axis=1)
         dfw['Thermal_cum'] = dfw.Thermal_correct.cumsum()
         dfw['dayL'] = dfw.Date.apply(
@@ -938,7 +1002,8 @@ def opsite():
         for file in files:
             file_path = os.path.join(root, file)
             print(file_path)
-            data = pd.read_csv(file_path,parse_dates=['reviving date', 'tillering date', 'jointing date','booting date', 'heading date', 'maturity date'])
+            data = pd.read_csv(file_path, encoding='gbk',
+                               parse_dates=['reviving date', 'tillering date', 'jointing date','booting date', 'heading date', 'maturity date'])
             global dft,flg
             dft = data
             flg = file_path[-5:-4]
