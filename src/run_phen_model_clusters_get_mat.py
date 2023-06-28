@@ -32,9 +32,13 @@ def Tem_correct_Wang_engle(today, hd,T,Tbase2,Topt2,Tcei2,value):
     else:
         return value
 
-def cluster_file():
+def cluster_files():
     # 读取站点信息文件
-    station_df = pd.read_csv('D:/workspace/rice_crop_model/data/clusters/station_catalog_obserphen.csv', encoding='gbk')
+    station_df = pd.read_csv('../data/clusters/station_catalog_obserphen.csv', encoding='gbk')
+    # 读取物候观测记录文件
+    df_phe = pd.read_csv('../data/global/obser_pheno_catalog.csv', encoding="GBK",
+                         parse_dates=['reviving date', 'tillering date', 'jointing date',
+                                      'booting date', 'heading date', 'maturity date'])
     dfall = pd.DataFrame()
     # 计算聚类变量
     for ind, row in station_df.iterrows():
@@ -74,9 +78,11 @@ def cluster_file():
                 cluster_col_name = f'cluster_{n}_{var}'
                 df[cluster_col_name] = y_pred
     # 将结果输出到文件
+    df = df.drop(['Date', 'YY', 'TemAver', 'daily_gt8', ], axis=1)
+    df = df.rename(columns={'省份': 'sta province', '站名': 'sta name', '高程': 'alt'})
     df.to_csv('../data/clusters/merged_clusters.csv', index=False)
 
-    # 起始和结束列的索引
+    # 聚类结果起始列和结束列的索引
     start_col = 13
     end_col = df.shape[1]
     # 循环提取分类类别并存储为 Excel 文件
@@ -89,12 +95,17 @@ def cluster_file():
         # 循环存储每个类别的数据
         for value in unique_values:
             # 筛选数据
-            filtered_df = df[df[col_name] == value]
+            filtered_df = df.iloc[:, :8].copy()
+            filtered_df[f_name] = df[col_name]
+            filtered_df = filtered_df[filtered_df[f_name] == value]
+            # 合并相对应的物候观测记录
+            filtered_df_phe = filtered_df.merge(df_phe, on=['station ID','sta province', 'sta name', 'lat', 'lon','alt'], how='left')
             # 构造不同聚类类别文件名
             file_name = f'{f_name}_{value}.xlsx'
             # 存储为 Excel 文件
-            filtered_df.to_excel('../data/clusters/'+file_name, index=False)
-    return df
+            filtered_df_phe.to_excel('../data/clusters/'+file_name, index=False)
+
+            return filtered_df_phe
 
 def simulate_and_calibrate_T_base_opt_photoeffect_yin(mu, zeta, ep, Tbase, Topt, Tbase2):
     df = dft.copy()
