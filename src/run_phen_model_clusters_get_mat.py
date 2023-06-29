@@ -4,8 +4,10 @@ import numpy as np
 import math
 from pylab import *
 import Sun
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
 import os
-from rice_phen import read_station_weather, photo_effect_correct
+from rice_phen import photo_effect_correct
 from photo_period_effect import photoeffect_yin, photoeffect_oryza2000, photoeffect_wofost
 from T_dev_effect import Wang_engle, T_base_opt_ceiling, T_base_opt
 import datetime
@@ -13,6 +15,13 @@ os.chdir(os.path.dirname(os.path.realpath(__file__)))
 
 pd.options.display.max_columns = 999
 pd.options.display.max_rows = 999
+
+def read_station_weather(station, start, end):
+    df = pd.read_table("D:/workspace/rice_crop_model/data/Meteo(48 sta)/" + str(station) + ".txt",
+                       encoding='gbk', sep=' * ', engine='python',skiprows=[1])
+    df['Date'] = df.apply(lambda row: pd.to_datetime('%d-%d-%d' % (row.YY, row.mm, row.dd)), axis=1)
+    df = df.loc[(df.Date >= start) & (df.Date <= end), ['Date','YY','TemAver']]
+    return df
 
 def Tem_correct_T_base_opt(today, hd,T,Tbase2,Topt2,Thermal):
     if today > hd:
@@ -36,7 +45,7 @@ def cluster_files():
     # 读取站点信息文件
     station_df = pd.read_csv('../data/clusters/station_catalog_obserphen.csv', encoding='gbk')
     # 读取物候观测记录文件
-    df_phe = pd.read_csv('../data/global/obser_pheno_catalog.csv', encoding="GBK",
+    df_phe = pd.read_excel('../data/global/obser_pheno_catalog.xlsx',
                          parse_dates=['reviving date', 'tillering date', 'jointing date',
                                       'booting date', 'heading date', 'maturity date'])
     dfall = pd.DataFrame()
@@ -46,50 +55,52 @@ def cluster_files():
         dfw = read_station_weather(row['station ID'], pd.to_datetime('1986-01-01'), pd.to_datetime('2005-12-30'))
         dfw = dfw.dropna()
         dfw = dfw[dfw['TemAver'] <= 50].reset_index(drop=True)
-        dfw['daily_gt8'] = dfw['TemAver'].apply(lambda x: max(x - 8, 0))
         n = len(dfw)
-        dfw['Annual_gt8'] = (dfw.daily_gt8.cumsum()) / n * 365
-        dfw['Annual_Tem'] = (dfw.TemAver.cumsum()) / n * 365
+        dfw['daily_GT8'] = dfw['TemAver'].apply(lambda x: max(x - 8, 0))
+        dfw['yearlyGT8'] = (dfw.daily_GT8.cumsum()) / n * 365
+        dfw['yearlyTem'] = (dfw.TemAver.cumsum()) / n * 365
         dfw['station ID'] = row['station ID']
         dfw = dfw.drop_duplicates(subset=['station ID'], keep='last')
         dfall = pd.concat([dfall, dfw])
     df = station_df.merge(dfall, on=['station ID'], how='left')
     # 聚类变量列表
-    cluster_vars = ['Annual_Tem', 'Annual_GT8', 'AnGT8+lat', 'AnTem+lat']
+    cluster_vars = ['yearlyTem', 'yearlyGT8', 'YTem+lat', 'YGT8+lat']
     # 不同聚类数列表
-    n_clusters_list = [3, 6, 9, 12, 15]
+    n_clusters_list = [3, 6, 9, 12]
     # 循环生成聚类结果
     for i, var in enumerate(cluster_vars):
         for n in n_clusters_list:
-            # 读取数据并处理
-            for ind, row in df.iterrows():
-                # 获取聚类变量
-                if var == 'Annual_gt8':
-                    X = pd.DataFrame({'Annual_gt8': df.Annual_gt8})
-                elif var == 'lat+AnTem':
-                    X = pd.DataFrame({'Lat': df.lat, 'Annual_Tem': df.Annual_Tem})
-                else:
-                    X = pd.DataFrame({'Annual_Tem': df.Annual_Tem})
-                # 聚类
-                X_scaled = StandardScaler().fit_transform(X)
-                kmeans = KMeans(n_clusters=n)
-                kmeans.fit(X_scaled)
-                y_pred = kmeans.predict(X_scaled)
-                cluster_col_name = f'cluster_{n}_{var}'
-                df[cluster_col_name] = y_pred
+            # 获取聚类变量
+            if var == 'yearlyGT8':
+                X = pd.DataFrame({'yearlyGT8': df.yearlyGT8})
+            elif var == 'YTem+lat':
+                X = pd.DataFrame({'Lat': df.lat, 'yearlyTem': df.yearlyTem})
+            elif var == 'YGT8+lat':
+                X = pd.DataFrame({'Lat': df.lat, 'yearlyGT8': df.yearlyGT8})
+            else:
+                X = pd.DataFrame({'yearlyTem': df.yearlyTem})
+            # 聚类
+            scaler = StandardScaler()
+            X_scaled = scaler.fit_transform(X)
+            kmeans = KMeans(n_clusters=n)
+            kmeans.fit(X_scaled)
+            y_pred = kmeans.predict(X_scaled)
+            cluster_col_name = f'cluster{n}_{var}'
+            df[cluster_col_name] = y_pred
     # 将结果输出到文件
-    df = df.drop(['Date', 'YY', 'TemAver', 'daily_gt8', ], axis=1)
+    print(df.head(2))
+    df = df.drop(['Date', 'YY', 'TemAver', 'daily_GT8', ], axis=1)
     df = df.rename(columns={'省份': 'sta province', '站名': 'sta name', '高程': 'alt'})
     df.to_csv('../data/clusters/merged_clusters.csv', index=False)
 
     # 聚类结果起始列和结束列的索引
-    start_col = 13
+    start_col = 8
     end_col = df.shape[1]
     # 循环提取分类类别并存储为 Excel 文件
-    for i in range(start_col, end_col):
-        # 获取列名和不同聚类类别保存的文件名
-        col_name = df.columns[i]
-        f_name = col_name[9:]
+    for m in range(start_col, end_col):
+        # 获取列名
+        col_name = df.columns[m]
+        f_name = col_name
         # 获取不同类别
         unique_values = df[col_name].unique()
         # 循环存储每个类别的数据
@@ -99,13 +110,13 @@ def cluster_files():
             filtered_df[f_name] = df[col_name]
             filtered_df = filtered_df[filtered_df[f_name] == value]
             # 合并相对应的物候观测记录
-            filtered_df_phe = filtered_df.merge(df_phe, on=['station ID','sta province', 'sta name', 'lat', 'lon','alt'], how='left')
+            filtered_df_phe = filtered_df.merge(df_phe, on=['station ID', 'sta province', 'sta name', 'lat', 'lon', 'alt'], how='left')
             # 构造不同聚类类别文件名
-            file_name = f'{f_name}_{value}.xlsx'
+            file_name = f'{col_name}_{value}.xlsx'
             # 存储为 Excel 文件
-            filtered_df_phe.to_excel('../data/clusters/'+file_name, index=False)
+            filtered_df_phe.to_excel('../data/clusters/sites_clusters/general_parameters/var_class/'+file_name, index=False)
+            print(file_name)
 
-            return filtered_df_phe
 
 def simulate_and_calibrate_T_base_opt_photoeffect_yin(mu, zeta, ep, Tbase, Topt, Tbase2):
     df = dft.copy()
@@ -1034,6 +1045,6 @@ def opsite():
             simulate_and_calibrate_Wang_engle_photoeffect_oryza2000(Dc=12.5, Tbase=8, Topt=30, Tcei=42, Tbase2=4)
 
 if __name__ == "__main__":
-    opsite()
+    cluster_files()
 
 
