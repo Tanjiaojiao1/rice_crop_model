@@ -9,7 +9,7 @@ from sklearn.cluster import KMeans
 import os
 from rice_phen import photo_effect_correct
 from photo_period_effect import photoeffect_yin, photoeffect_oryza2000, photoeffect_wofost
-from T_dev_effect import Wang_engle, T_base_opt_ceiling, T_base_opt
+from T_dev_effect import Wang_engle, T_base_op_ceiling, T_base_opt
 import datetime
 import Sun
 os.chdir(os.path.dirname(os.path.realpath(__file__)))

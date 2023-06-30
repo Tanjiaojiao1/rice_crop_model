@@ -8,7 +8,7 @@ import os
 import seaborn as sns
 from rice_phen import read_station_weather, photo_effect_correct
 from photo_period_effect import photoeffect_yin, photoeffect_oryza2000, photoeffect_wofost
-from T_dev_effect import Wang_engle, T_base_opt_ceiling, T_base_opt
+from T_dev_effect import Wang_engle, T_base_op_ceiling, T_base_opt
 import datetime
 from rice_phen import read_station_weather
 from sklearn.cluster import KMeans
@@ -120,7 +120,7 @@ def cluster_and_sim():
             for ind,gp in df.groupby('Cluster_%d_%s'%(n_cluster,'_'.join(va))):
                 print(ind)
                 dfws=wths.merge(gp,on=['SID','year','season'])[['SID','year','season','Date','TemAver']]
-                for thermalfun,thermalfun_para in zip([Wang_engle, T_base_opt_ceiling, T_base_opt],[{"Tbase":8, "Topt":30, "Tcei":42},{"Tbase":8,
+                for thermalfun,thermalfun_para in zip([Wang_engle, T_base_op_ceiling, T_base_opt],[{"Tbase":8, "Topt":30, "Tcei":42},{"Tbase":8,
                                                                      "Topt_low":25, "Topt_high":35, "Tcei":42,},{"Tbase":8, "Topt":30}]):
                     for photofun,photofun_para in zip([photoeffect_yin, photoeffect_oryza2000, photoeffect_wofost,""],[{"mu":-15.46, "zeta":2.06, "ep":2.48},{"MOPP":11.5,'PPSE':0.2},{"Dc":16, "Do":12.5},""]):
                         
