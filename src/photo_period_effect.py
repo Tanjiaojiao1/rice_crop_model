@@ -19,7 +19,7 @@ def photoeffect_wofost(DL,Dc=20,Do=12.5):
     max_photo=max([wofost_photo(DL=DLm,Dc=Dc,Do=Do) for DLm in np.linspace(1, 24, 100)])
     return photo/max_photo
 
-def photoeffect_oryza200(DL, MOPP=11.5, PPSE=0.2):
+def photoeffect_oryza2000(DL, MOPP=11.5, PPSE=0.2):
     '''
     van Oort et al. 2011, Correlation between temperature and phenology prediction error in rice
     '''

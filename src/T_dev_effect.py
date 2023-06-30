@@ -8,7 +8,7 @@ def T_base_opt(T, Tbase=8, Topt=30):
     '''
     
     return np.interp(T,[Tbase,Topt],[0,Topt-Tbase])
-def T_base_op_ceiling(T, Tbase=8, Topt_low=20,Topt_high=30, Tcei=42):
+def T_base_opt_ceiling(T, Tbase=8, Topt_low=20,Topt_high=30, Tcei=42):
 
     return np.interp(T,[Tbase,Topt_low,Topt_high,Tcei],[0,Topt_low-Tbase,Topt_low-Tbase,0])
 
