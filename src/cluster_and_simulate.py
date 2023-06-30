@@ -122,7 +122,8 @@ def cluster_and_sim():
                 dfws=wths.merge(gp,on=['SID','year','season'])[['SID','year','season','Date','TemAver']]
                 for thermalfun,thermalfun_para in zip([Wang_engle, T_base_op_ceiling, T_base_opt],[{"Tbase":8, "Topt":30, "Tcei":42},{"Tbase":8,
                                                                      "Topt_low":25, "Topt_high":35, "Tcei":42,},{"Tbase":8, "Topt":30}]):
-                    for photofun,photofun_para in zip([photoeffect_yin, photoeffect_oryza2000, photoeffect_wofost,""],[{"mu":-15.46, "zeta":2.06, "ep":2.48},{"MOPP":11.5,'PPSE':0.2},{"Dc":16, "Do":12.5},""]):
+                    for photofun,photofun_para in zip([photoeffect_yin, photoeffect_oryza2000, photoeffect_wofost,""],
+                                                      [{"mu":-15.46, "zeta":2.06, "ep":2.48},{"Dc":12.5,'PPSE':0.2},{"Dc":16, "Do":12.5},""]):
                         
                         dfcm=simulate_and_calibrate(thermal_fun=thermalfun,thermal_fun_para=thermalfun_para,photofun=photofun,photo_fun_para=photofun_para,dfws=dfws,df=gp)
                         print(thermalfun,photofun)
@@ -167,5 +168,5 @@ def boxplot_cluster_effect():
     sns.boxplot(data=df,y='Cluster_6_STM',x='STS');show()
     print(df.columns)
 if __name__=="__main__":
-    # cluster_and_sim()
+    cluster_and_sim()
     boxplot_error()
